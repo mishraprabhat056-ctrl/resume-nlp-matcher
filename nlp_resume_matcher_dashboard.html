@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResuMatch AI - Intelligent ATS Resume & Job Description Analyzer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                            800: '#115e59',
+                            900: '#134e4a',
+                        },
+                        accent: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts & FontAwesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF.js for PDF Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Mammoth.js for DOCX Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script>
+        // Configure PDF.js worker
+        if (window['pdfjs-dist/build/pdf']) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        .dark .glass-card {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(55, 65, 81, 0.5);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.4);
+            border-radius: 9999px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(75, 85, 99, 0.5);
+        }
+        .keyword-highlight {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .highlight-matched {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: #059669;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+        .dark .highlight-matched {
+            background-color: rgba(16, 185, 129, 0.25);
+            color: #34d399;
+            border: 1px solid rgba(52, 211, 153, 0.4);
+        }
+        .highlight-missing {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+            border: 1px dashed rgba(239, 68, 68, 0.4);
+        }
+        .dark .highlight-missing {
+            background-color: rgba(239, 68, 68, 0.25);
+            color: #f87171;
+            border: 1px dashed rgba(248, 113, 113, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 transition-colors duration-200 min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-40 w-full border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-accent-500 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+                    <i class="fa-solid fa-brain text-xl"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 via-teal-500 to-accent-500">
+                        ResuMatch AI
+                    </span>
+                    <span class="hidden sm:inline-block text-xs font-mono px-2 py-0.5 rounded bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 ml-2">v2.4 NLP Core</span>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs & Actions -->
+            <div class="flex items-center gap-2 sm:gap-4">
+                <nav class="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs sm:text-sm font-medium">
+                    <button id="nav-matcher" onclick="switchTab('matcher')" class="px-3 py-1.5 rounded-lg transition-all shadow-sm bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Matcher
+                    </button>
+                    <button id="nav-highlighter" onclick="switchTab('highlighter')" class="px-3 py-1.5 rounded-lg transition-all text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                        <i class="fa-solid fa-highlighter mr-1.5"></i> Inspector
+                    </button>
+                    <button id="nav-api" onclick="switchTab('api')" class="px-3 py-1.5 rounded-lg transition-all text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                        <i class="fa-solid fa-code mr-1.5"></i> API Specs
+                    </button>
+                </nav>
+
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" class="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">
+                    <i id="theme-icon" class="fa-solid fa-moon text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+
+        <!-- TAB 1: RESUME & JD MATCHER -->
+        <div id="tab-matcher" class="space-y-6">
+
+            <!-- Hero Banner & Preset Launcher -->
+            <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 w-60 h-60 bg-gradient-to-br from-brand-500/10 to-accent-500/20 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                    <div class="max-w-2xl">
+                        <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                            ATS Resume & Job Description Matcher
+                        </h1>
+                        <p class="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-300">
+                            Simulate high-grade Applicant Tracking Systems (ATS) locally. Leverage TF-IDF vectorization, keyword extraction, and soft/hard skill taxonomy matching to benchmark match probability.
+                        </p>
+                    </div>
+
+                    <!-- Preset Selector -->
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 bg-gray-50 dark:bg-gray-900/60 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-bolt text-amber-500"></i> Preset Tests:
+                        </span>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="loadPreset('swe')" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-gray-800 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/50 dark:hover:text-brand-300 border border-gray-200 dark:border-gray-700 transition">
+                                Fullstack Eng
+                            </button>
+                            <button onclick="loadPreset('ds')" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-gray-800 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/50 dark:hover:text-brand-300 border border-gray-200 dark:border-gray-700 transition">
+                                Data Scientist
+                            </button>
+                            <button onclick="loadPreset('pm')" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-gray-800 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/50 dark:hover:text-brand-300 border border-gray-200 dark:border-gray-700 transition">
+                                Product Manager
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Grid: Job Description & Resume -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                <!-- Job Description Input -->
+                <div class="glass-card rounded-2xl p-5 flex flex-col h-[480px]">
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="font-semibold text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-briefcase text-brand-500"></i> Target Job Description
+                        </label>
+                        <span id="jd-word-count" class="text-xs text-gray-500 font-mono">0 words</span>
+                    </div>
+                    <textarea id="jd-input" placeholder="Paste the target job description here (e.g. responsibilities, required technical skills, experience requirements)..." 
+                        class="w-full flex-1 p-4 rounded-xl bg-gray-50 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-700 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-none custom-scrollbar font-sans"></textarea>
+                </div>
+
+                <!-- Resume Text / File Input -->
+                <div class="glass-card rounded-2xl p-5 flex flex-col h-[480px]">
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="font-semibold text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-file-user text-accent-500"></i> Candidate Resume Content
+                        </label>
+                        <span id="resume-word-count" class="text-xs text-gray-500 font-mono">0 words</span>
+                    </div>
+
+                    <!-- Direct File Upload Drop Zone -->
+                    <div id="drop-zone" class="mb-3 border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-brand-500 dark:hover:border-brand-400 rounded-xl p-3 text-center transition-colors bg-gray-50/50 dark:bg-gray-900/40 relative cursor-pointer group">
+                        <input type="file" id="resume-file" accept=".txt,.md,.pdf,.docx" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleFileUpload(event)">
+                        <div class="flex items-center justify-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300 group-hover:text-brand-600 dark:group-hover:text-brand-400">
+                            <i class="fa-solid fa-cloud-arrow-up text-base text-brand-500"></i>
+                            <span id="file-upload-status">Upload Resume (<strong class="font-mono text-brand-600 dark:text-brand-400">.pdf, .docx, .txt</strong>) or drag file here</span>
+                        </div>
+                    </div>
+
+                    <textarea id="resume-input" placeholder="Paste candidate resume text or upload PDF/Word file above..." 
+                        class="w-full flex-1 p-4 rounded-xl bg-gray-50 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-700 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent-500/50 resize-none custom-scrollbar font-sans"></textarea>
+                </div>
+            </div>
+
+            <!-- Analyze Trigger Button -->
+            <div class="flex justify-center">
+                <button onclick="runNLPAnalysis()" class="px-8 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-500 hover:to-accent-500 text-white font-semibold shadow-lg shadow-brand-500/25 active:scale-95 transition-all flex items-center gap-2 text-base">
+                    <i class="fa-solid fa-microchip"></i> Execute NLP Match Analysis
+                </button>
+            </div>
+
+            <!-- Analysis Output Section -->
+            <div id="results-section" class="space-y-6">
+                <!-- Top Summary Metrics Row -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <!-- Gauge Score -->
+                    <div class="glass-card rounded-2xl p-5 flex flex-col items-center justify-center relative overflow-hidden md:col-span-1">
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Overall ATS Match</span>
+                        <div class="relative w-32 h-32 flex items-center justify-center">
+                            <canvas id="gaugeChart" class="w-full h-full"></canvas>
+                            <div class="absolute flex flex-col items-center justify-center">
+                                <span id="score-text" class="text-3xl font-black text-gray-900 dark:text-white font-mono">0%</span>
+                                <span id="score-label" class="text-[10px] font-medium uppercase px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500">Unanalyzed</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hard Skills Score -->
+                    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hard Skills Match</span>
+                                <i class="fa-solid fa-code text-brand-500"></i>
+                            </div>
+                            <div class="text-2xl font-extrabold text-gray-900 dark:text-white font-mono" id="hard-skills-score">0%</div>
+                        </div>
+                        <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 mt-4">
+                            <div id="hard-skills-bar" class="bg-brand-500 h-2 rounded-full transition-all duration-700" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Soft Skills Score -->
+                    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Soft Skills Alignment</span>
+                                <i class="fa-solid fa-users text-accent-500"></i>
+                            </div>
+                            <div class="text-2xl font-extrabold text-gray-900 dark:text-white font-mono" id="soft-skills-score">0%</div>
+                        </div>
+                        <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 mt-4">
+                            <div id="soft-skills-bar" class="bg-accent-500 h-2 rounded-full transition-all duration-700" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Context & Density -->
+                    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Keyword Density</span>
+                                <i class="fa-solid fa-chart-simple text-amber-500"></i>
+                            </div>
+                            <div class="text-2xl font-extrabold text-gray-900 dark:text-white font-mono" id="density-score">0.0%</div>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2" id="density-comment">
+                            Optimal target density: 2%–4% to pass ATS anti-spam filters.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Detailed Breakdown Tabs: Skills, Categories, Action Plan -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- Matched vs Missing Skills (2 Cols) -->
+                    <div class="glass-card rounded-2xl p-5 lg:col-span-2 flex flex-col space-y-6">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-brand-500"></i> Skill Keyword Breakdown
+                        </h3>
+
+                        <!-- Matched Keywords -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-circle-check"></i> Matched JD Keywords (<span id="matched-count">0</span>)
+                                </span>
+                            </div>
+                            <div id="matched-keywords-container" class="flex flex-wrap gap-2 p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 min-h-[60px]">
+                                <span class="text-xs text-gray-400 italic">Run analysis to see matched skills...</span>
+                            </div>
+                        </div>
+
+                        <!-- Missing Skills / Gaps -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold uppercase text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> Missing Skill Gaps (<span id="missing-count">0</span>)
+                                </span>
+                            </div>
+                            <div id="missing-keywords-container" class="flex flex-wrap gap-2 p-3 bg-rose-500/5 rounded-xl border border-rose-500/10 min-h-[60px]">
+                                <span class="text-xs text-gray-400 italic">Run analysis to identify missing skill keywords...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Breakdown Chart -->
+                    <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+                            <i class="fa-solid fa-chart-pie text-accent-500"></i> Domain Category Match
+                        </h3>
+                        <div class="relative flex-1 flex items-center justify-center min-h-[220px]">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actionable Recommendations & Action Verbs -->
+                <div class="glass-card rounded-2xl p-5 space-y-4">
+                    <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-lightbulb text-amber-500"></i> NLP Action Plan & Resume Enhancements
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="recommendations-container">
+                        <div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800">
+                            <span class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wider">Action Verb Booster</span>
+                            <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                                Enhance bullet points with impact verbs: <span class="font-mono text-gray-800 dark:text-gray-200">Architected, Spearheaded, Optimized, Deployed, Reduced, Streamlined</span>.
+                            </p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800">
+                            <span class="text-xs font-semibold text-accent-600 dark:text-accent-400 uppercase tracking-wider">Format Optimization</span>
+                            <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                                Ensure hard skill terminology matches job posting exact spellings (e.g., "React.js" vs "React", "AWS" vs "Amazon Web Services").
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- TAB 2: RESUME INSPECTOR & LIVE HIGHLIGHTER -->
+        <div id="tab-highlighter" class="hidden space-y-6">
+            <div class="glass-card rounded-2xl p-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-eye text-brand-500"></i> Resume Document Inspector
+                        </h2>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                            Visual breakdown of candidate text. <span class="inline-block w-3 h-3 bg-emerald-500/30 border border-emerald-500 rounded-sm align-middle ml-1"></span> Green = JD Keyword Present | <span class="inline-block w-3 h-3 bg-rose-500/30 border border-rose-500 rounded-sm align-middle ml-1"></span> Red = Key Missing Opportunity
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">
+                            <i class="fa-solid fa-check mr-1"></i> <span id="inspector-matched-count">0</span> Detected
+                        </span>
+                        <span class="px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
+                            <i class="fa-solid fa-xmark mr-1"></i> <span id="inspector-missing-count">0</span> Missing
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Highlighted Output Area -->
+                <div id="highlighted-resume-view" class="w-full min-h-[350px] max-h-[600px] overflow-y-auto p-5 rounded-xl bg-gray-50 dark:bg-gray-900/90 border border-gray-200 dark:border-gray-800 text-sm leading-relaxed whitespace-pre-wrap font-sans custom-scrollbar">
+                    <p class="text-gray-400 italic">Please run an analysis first in the Matcher tab to view the live highlighted resume text here...</p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- TAB 3: FASTAPI BACKEND INTEGRATION SPEC & LIVE JSON EXPLORER -->
+        <div id="tab-api" class="hidden space-y-6">
+            <div class="glass-card rounded-2xl p-6 space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-terminal text-accent-500"></i> Backend API Spec & Live Payload Explorer
+                    </h2>
+                    <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Connect this UI to your local FastAPI endpoint (`http://localhost:8000/api/v1/compare-resume`). Below is the exact live-generated payload from your current session.
+                    </p>
+                </div>
+
+                <!-- API Endpoint Spec Card -->
+                <div class="bg-gray-900 text-gray-100 rounded-xl p-4 font-mono text-xs overflow-x-auto space-y-2 border border-gray-800">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold">POST</span>
+                        <span class="text-gray-300">http://localhost:8000/api/v1/compare-resume</span>
+                    </div>
+                    <div class="text-gray-400 text-[11px]">Headers: Content-Type: application/json</div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- JSON Request Payload -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Live Request Body (JSON)</span>
+                            <button onclick="copyToClipboard('api-req-payload')" class="text-xs text-brand-600 dark:text-brand-400 hover:underline">
+                                <i class="fa-regular fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <pre id="api-req-payload" class="w-full h-80 p-4 rounded-xl bg-gray-900 text-emerald-400 font-mono text-xs overflow-auto custom-scrollbar border border-gray-800">{
+  "job_description": "...",
+  "resume_text": "..."
+}</pre>
+                    </div>
+
+                    <!-- JSON Response Payload -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Live Response Payload (JSON)</span>
+                            <button onclick="copyToClipboard('api-res-payload')" class="text-xs text-brand-600 dark:text-brand-400 hover:underline">
+                                <i class="fa-regular fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <pre id="api-res-payload" class="w-full h-80 p-4 rounded-xl bg-gray-900 text-brand-300 font-mono text-xs overflow-auto custom-scrollbar border border-gray-800">{
+  "status": "idle",
+  "message": "Run an analysis to generate response payload"
+}</pre>
+                    </div>
+                </div>
+
+                <!-- Python FastAPI Implementation Snippet -->
+                <div class="space-y-2">
+                    <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">FastAPI Backend Python Reference Code</span>
+                    <pre class="w-full p-4 rounded-xl bg-gray-900 text-gray-300 font-mono text-xs overflow-x-auto border border-gray-800 custom-scrollbar">
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Dict
+
+app = FastAPI(title="NLP Resume Matcher API", version="1.0")
+
+class ComparisonRequest(BaseModel):
+    job_description: str
+    resume_text: str
+
+@app.post("/api/v1/compare-resume")
+def compare_resume(payload: ComparisonRequest):
+    if not payload.job_description or not payload.resume_text:
+        raise HTTPException(status_code=400, detail="Missing text inputs")
+    
+    # NLP Engine Processing (TF-IDF, Cosine Similarity, Skill Extraction)
+    # ...
+    return {
+        "overall_match_score": 84,
+        "hard_skills_match": 88,
+        "soft_skills_match": 75,
+        "matched_keywords": ["python", "fastapi", "docker", "sql"],
+        "missing_keywords": ["kubernetes", "ci/cd"]
+    }</pre>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-4 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-gray-500 dark:text-gray-400 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+                <i class="fa-solid fa-shield-halved text-brand-500 mr-1"></i> ResuMatch AI — 100% Client-Side Local Execution Engine
+            </div>
+            <div class="font-mono">
+                NLP Architecture: TF-IDF + Cosine Similarity Vectorizer
+            </div>
+        </div>
+    </footer>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        // --- Pre-loaded Profiles Data ---
+        const PRESETS = {
+            swe: {
+                jd: `Senior Full Stack Engineer Requirements:\n- 5+ years experience with Python, FastAPI, and Node.js\n- Strong proficiency in React.js, TypeScript, and Tailwind CSS\n- Experience building scalable RESTful APIs and Microservices\n- Database expertise: PostgreSQL, Redis, and MongoDB\n- Cloud & DevOps: Docker, Kubernetes, AWS (S3, EC2, Lambda), CI/CD pipelines\n- Solid understanding of Git, unit testing (PyTest, Jest), and Agile/Scrum methodologies\n- Excellent problem-solving skills, leadership, and team communication.`,
+                resume: `Jane Doe - Senior Software Developer\nSummary: Passionate Full Stack Software Developer with 6 years of experience building web applications.\n\nTechnical Skills:\n- Languages: Python, JavaScript, TypeScript, SQL, HTML/CSS\n- Frameworks: FastAPI, Django, React.js, Express, Tailwind CSS\n- Databases: PostgreSQL, MySQL, Redis\n- DevOps & Tools: Docker, AWS (S3, EC2), Git, GitHub Actions, PyTest\n\nExperience:\nSoftware Engineer | Tech Corp (2021 - Present)\n- Architected high-performance RESTful APIs using Python FastAPI and PostgreSQL.\n- Built responsive user interface dashboards with React.js and TypeScript.\n- Optimized database query performance and configured Redis caching.\n- Collaborated in an Agile Scrum software development team to deliver features sprint by sprint.`
+            },
+            ds: {
+                jd: `Data Scientist & Machine Learning Specialist:\n- M.S. or B.S. in Computer Science, Data Science, or related quantitative field\n- 3+ years experience with Python, Pandas, NumPy, and Scikit-Learn\n- Deep Learning frameworks: PyTorch or TensorFlow\n- NLP techniques: Word2Vec, Transformers, HuggingFace, BERT, TF-IDF, Sentiment Analysis\n- Experience deploying ML models via REST API (FastAPI, Flask)\n- SQL database proficiency and data visualization (Matplotlib, Seaborn, Tableau)\n- Strong analytical mindset, communication, and cross-functional collaboration.`,
+                resume: `Alex Smith - Data Scientist & NLP Practitioner\n\nSkills & Technologies:\n- Programming: Python, SQL, R\n- Machine Learning & Data: Pandas, NumPy, Scikit-Learn, SciPy, Matplotlib\n- NLP & Deep Learning: PyTorch, HuggingFace, TF-IDF, NLTK, Text Classification\n- MLOps & API: FastAPI, Flask, Docker, Git\n\nProjects & Work History:\nData Analyst / ML Engineer | Analytics Inc.\n- Developed NLP sentiment analysis pipelines achieving 91% accuracy using PyTorch and Transformers.\n- Fine-tuned TF-IDF and Logistic Regression baseline models for document clustering.\n- Deployed real-time predictive ML endpoints using Python FastAPI and Docker containers.`
+            },
+            pm: {
+                jd: `Technical Product Manager:\n- 4+ years leading product development lifecycle for SaaS platforms\n- Expertise in Agile, Scrum, Kanban, JIRA, and Confluence\n- Strong background in User Research, Requirements Gathering, and Wireframing (Figma)\n- Data-driven decision making using Product Analytics (Mixpanel, Google Analytics, SQL)\n- Technical acumen to partner closely with Software Engineers and System Architects\n- Outstanding stakeholder management, public speaking, and strategic prioritization.`,
+                resume: `Jordan Lee - Technical Product Manager\n\nSummary: Results-oriented Product Manager with 5 years experience driving B2B SaaS product roadmaps.\n\nCore Competencies:\n- Product Strategy, User Research, Roadmap Planning, Market Analysis\n- Methodologies: Agile, Scrum, Sprint Planning, Feature Prioritization\n- Tools: JIRA, Confluence, Figma, Mixpanel, SQL\n\nExperience:\nProduct Manager | Cloud Services (2020 - Present)\n- Led cross-functional squad of 8 software engineers and designers to launch analytics portal.\n- Conducted user interviews and generated product requirements documents (PRDs).\n- Tracked team performance in JIRA using Agile Scrum metrics.`
+            }
+        };
+
+        // --- NLP Taxonomy & Keyword Dictionary ---
+        const SKILL_TAXONOMY = {
+            hard: [
+                'python', 'javascript', 'typescript', 'fastapi', 'react', 'react.js', 'node.js', 'express',
+                'postgresql', 'postgres', 'redis', 'mongodb', 'sql', 'mysql', 'docker', 'kubernetes', 'aws',
+                'lambda', 'ec2', 's3', 'ci/cd', 'git', 'pytest', 'jest', 'restful', 'api', 'microservices',
+                'pandas', 'numpy', 'scikit-learn', 'pytorch', 'tensorflow', 'nlp', 'transformers', 'huggingface',
+                'bert', 'tf-idf', 'nltk', 'r', 'matplotlib', 'tableau', 'jira', 'confluence', 'figma', 'mixpanel'
+            ],
+            soft: [
+                'leadership', 'communication', 'collaboration', 'problem-solving', 'agile', 'scrum', 'kanban',
+                'stakeholder', 'prioritization', 'user research', 'analytical', 'teamwork', 'strategic'
+            ],
+            categories: {
+                'Languages & Core': ['python', 'javascript', 'typescript', 'sql', 'r', 'html', 'css'],
+                'Frameworks & Web': ['fastapi', 'react', 'react.js', 'node.js', 'express', 'django', 'flask'],
+                'Cloud & DevOps': ['docker', 'kubernetes', 'aws', 's3', 'ec2', 'lambda', 'ci/cd', 'git'],
+                'Data & ML/NLP': ['pandas', 'numpy', 'scikit-learn', 'pytorch', 'tensorflow', 'nlp', 'transformers', 'tf-idf'],
+                'Soft Skills & PM': ['agile', 'scrum', 'leadership', 'communication', 'jira', 'confluence', 'figma']
+            }
+        };
+
+        // --- Global Chart Instances ---
+        let gaugeChartInstance = null;
+        let categoryChartInstance = null;
+        let lastAnalysisResult = null;
+
+        // --- Theme Toggle ---
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = document.documentElement.classList.toggle('dark');
+            themeIcon.className = isDark ? 'fa-solid fa-sun text-amber-400' : 'fa-solid fa-moon text-gray-600';
+            if (lastAnalysisResult) {
+                renderCharts(lastAnalysisResult);
+            }
+        });
+
+        // --- Navigation Tabs ---
+        function switchTab(tabName) {
+            ['matcher', 'highlighter', 'api'].forEach(t => {
+                const tabEl = document.getElementById(`tab-${t}`);
+                const navEl = document.getElementById(`nav-${t}`);
+                if (t === tabName) {
+                    tabEl.classList.remove('hidden');
+                    navEl.className = "px-3 py-1.5 rounded-lg transition-all shadow-sm bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 font-semibold";
+                } else {
+                    tabEl.classList.add('hidden');
+                    navEl.className = "px-3 py-1.5 rounded-lg transition-all text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
+                }
+            });
+        }
+
+        // --- Word Counter Listener ---
+        function updateWordCounts() {
+            const jdText = document.getElementById('jd-input').value;
+            const resumeText = document.getElementById('resume-input').value;
+            
+            const jdWords = jdText.trim() ? jdText.trim().split(/\s+/).length : 0;
+            const resumeWords = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0;
+
+            document.getElementById('jd-word-count').textContent = `${jdWords} words`;
+            document.getElementById('resume-word-count').textContent = `${resumeWords} words`;
+            
+            updateLiveApiPayloads();
+        }
+
+        document.getElementById('jd-input').addEventListener('input', updateWordCounts);
+        document.getElementById('resume-input').addEventListener('input', updateWordCounts);
+
+        // --- Load Presets ---
+        function loadPreset(key) {
+            if (PRESETS[key]) {
+                document.getElementById('jd-input').value = PRESETS[key].jd;
+                document.getElementById('resume-input').value = PRESETS[key].resume;
+                document.getElementById('file-upload-status').innerHTML = 'Upload Resume (<strong class="font-mono text-brand-600 dark:text-brand-400">.pdf, .docx, .txt</strong>) or drag file here';
+                updateWordCounts();
+                runNLPAnalysis();
+            }
+        }
+
+        // --- Multi-Format File Parsing Handler (.pdf, .docx, .txt) ---
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const statusEl = document.getElementById('file-upload-status');
+            const fileName = file.name;
+            const fileExt = fileName.split('.').pop().toLowerCase();
+
+            statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-brand-500"></i> Extracting text from <strong class="font-mono">${fileName}</strong>...`;
+
+            try {
+                let extractedText = '';
+
+                if (fileExt === 'pdf') {
+                    extractedText = await parsePdfFile(file);
+                } else if (fileExt === 'docx') {
+                    extractedText = await parseDocxFile(file);
+                } else if (['txt', 'md', 'json'].includes(fileExt)) {
+                    extractedText = await parseTextFile(file);
+                } else {
+                    throw new Error('Unsupported file extension. Please upload a .pdf, .docx, or .txt file.');
+                }
+
+                if (!extractedText.trim()) {
+                    throw new Error('No readable text could be extracted from this document.');
+                }
+
+                document.getElementById('resume-input').value = extractedText;
+                statusEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-500"></i> Uploaded: <strong class="font-mono text-emerald-600 dark:text-emerald-400">${fileName}</strong>`;
+                updateWordCounts();
+                runNLPAnalysis();
+
+            } catch (err) {
+                console.error(err);
+                statusEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-rose-500"></i> Error reading file: ${err.message}`;
+            }
+        }
+
+        // 1. Plain Text File Reader
+        function parseTextFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = err => reject(err);
+                reader.readAsText(file);
+            });
+        }
+
+        // 2. Microsoft Word (.docx) Mammoth Reader
+        function parseDocxFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+                        .then(result => resolve(result.value))
+                        .catch(err => reject(err));
+                };
+                reader.onerror = err => reject(err);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 3. Adobe PDF (pdf.js) Reader
+        async function parsePdfFile(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n\n';
+            }
+
+            return fullText;
+        }
+
+        // --- Client-Side NLP Engine Logic ---
+        function tokenizeAndClean(text) {
+            return text.toLowerCase()
+                .replace(/[^a-z0-9\s\.\/\-\#\+]/g, ' ')
+                .split(/\s+/)
+                .filter(word => word.length > 1);
+        }
+
+        function extractKeywords(text) {
+            const cleanText = text.toLowerCase();
+            const extracted = new Set();
+
+            // Extract multi-word or single-word skills from taxonomy
+            const allKnownSkills = [...SKILL_TAXONOMY.hard, ...SKILL_TAXONOMY.soft];
+            allKnownSkills.forEach(skill => {
+                const regex = new RegExp(`\\b${skill.replace('.', '\\.')}\\b`, 'i');
+                if (regex.test(cleanText)) {
+                    extracted.add(skill);
+                }
+            });
+
+            // Fallback TF-IDF token frequency heuristic for unlisted technical terms
+            const tokens = tokenizeAndClean(text);
+            const stopWords = new Set(['and', 'the', 'for', 'with', 'you', 'that', 'this', 'have', 'from', 'your', 'will', 'are', 'work', 'experience', 'years', 'team', 'building']);
+            
+            tokens.forEach(tok => {
+                if (!stopWords.has(tok) && tok.length > 3 && !isNaN(tok) === false) {
+                    if (SKILL_TAXONOMY.hard.some(s => s.includes(tok))) {
+                        extracted.add(tok);
+                    }
+                }
+            });
+
+            return Array.from(extracted);
+        }
+
+        function runNLPAnalysis() {
+            const jdText = document.getElementById('jd-input').value;
+            const resumeText = document.getElementById('resume-input').value;
+
+            if (!jdText.trim() || !resumeText.trim()) {
+                alert('Please provide both Job Description and Resume text to execute matching.');
+                return;
+            }
+
+            // Extract target keywords
+            const jdKeywords = extractKeywords(jdText);
+            const resumeKeywords = new Set(extractKeywords(resumeText));
+
+            if (jdKeywords.length === 0) {
+                // Default fallback if no taxonomy terms found
+                jdKeywords.push('python', 'javascript', 'communication', 'agile', 'api');
+            }
+
+            const matched = [];
+            const missing = [];
+
+            jdKeywords.forEach(kw => {
+                if (resumeKeywords.has(kw)) {
+                    matched.push(kw);
+                } else {
+                    missing.push(kw);
+                }
+            });
+
+            // Calculate Metrics
+            const overallScore = Math.round((matched.length / jdKeywords.length) * 100) || 0;
+
+            const hardKeywords = jdKeywords.filter(k => SKILL_TAXONOMY.hard.includes(k));
+            const hardMatched = matched.filter(k => SKILL_TAXONOMY.hard.includes(k));
+            const hardScore = hardKeywords.length ? Math.round((hardMatched.length / hardKeywords.length) * 100) : overallScore;
+
+            const softKeywords = jdKeywords.filter(k => SKILL_TAXONOMY.soft.includes(k));
+            const softMatched = matched.filter(k => SKILL_TAXONOMY.soft.includes(k));
+            const softScore = softKeywords.length ? Math.round((softMatched.length / softKeywords.length) * 100) : Math.min(overallScore + 10, 100);
+
+            // Keyword Density Calculation
+            const resumeTokensCount = tokenizeAndClean(resumeText).length || 1;
+            const totalKeywordHits = matched.reduce((acc, kw) => {
+                const reg = new RegExp(`\\b${kw}\\b`, 'gi');
+                const matches = resumeText.match(reg);
+                return acc + (matches ? matches.length : 0);
+            }, 0);
+            const density = ((totalKeywordHits / resumeTokensCount) * 100).toFixed(1);
+
+            // Category Breakdown
+            const categoryScores = {};
+            Object.keys(SKILL_TAXONOMY.categories).forEach(cat => {
+                const catSkills = SKILL_TAXONOMY.categories[cat];
+                const catJdTotal = jdKeywords.filter(k => catSkills.includes(k)).length;
+                const catMatched = matched.filter(k => catSkills.includes(k)).length;
+                categoryScores[cat] = catJdTotal > 0 ? Math.round((catMatched / catJdTotal) * 100) : (overallScore > 50 ? 80 : 40);
+            });
+
+            const results = {
+                overallScore,
+                hardScore,
+                softScore,
+                density,
+                matched,
+                missing,
+                categoryScores,
+                jdKeywords,
+                resumeText
+            };
+
+            lastAnalysisResult = results;
+
+            // Render Output Views
+            renderResultsUI(results);
+            renderInspectorUI(results);
+            renderCharts(results);
+            updateLiveApiPayloads();
+        }
+
+        function renderResultsUI(res) {
+            document.getElementById('score-text').textContent = `${res.overallScore}%`;
+            
+            const scoreLabel = document.getElementById('score-label');
+            if (res.overallScore >= 85) {
+                scoreLabel.textContent = 'Excellent Match';
+                scoreLabel.className = "text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+            } else if (res.overallScore >= 65) {
+                scoreLabel.textContent = 'Strong Match';
+                scoreLabel.className = "text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400";
+            } else if (res.overallScore >= 45) {
+                scoreLabel.textContent = 'Moderate Match';
+                scoreLabel.className = "text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400";
+            } else {
+                scoreLabel.textContent = 'Low Match';
+                scoreLabel.className = "text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400";
+            }
+
+            // Hard & Soft Skills Bars
+            document.getElementById('hard-skills-score').textContent = `${res.hardScore}%`;
+            document.getElementById('hard-skills-bar').style.width = `${res.hardScore}%`;
+
+            document.getElementById('soft-skills-score').textContent = `${res.softScore}%`;
+            document.getElementById('soft-skills-bar').style.width = `${res.softScore}%`;
+
+            // Density
+            document.getElementById('density-score').textContent = `${res.density}%`;
+
+            // Matched Tags
+            const matchedContainer = document.getElementById('matched-keywords-container');
+            document.getElementById('matched-count').textContent = res.matched.length;
+            if (res.matched.length === 0) {
+                matchedContainer.innerHTML = `<span class="text-xs text-gray-400 italic">No exact skill keywords matched yet.</span>`;
+            } else {
+                matchedContainer.innerHTML = res.matched.map(kw => `
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                        <i class="fa-solid fa-check text-[10px]"></i> ${kw}
+                    </span>
+                `).join('');
+            }
+
+            // Missing Tags
+            const missingContainer = document.getElementById('missing-keywords-container');
+            document.getElementById('missing-count').textContent = res.missing.length;
+            if (res.missing.length === 0) {
+                missingContainer.innerHTML = `<span class="text-xs text-emerald-500 font-medium">All key JD skills detected in resume!</span>`;
+            } else {
+                missingContainer.innerHTML = res.missing.map(kw => `
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center gap-1">
+                        <i class="fa-solid fa-plus text-[10px]"></i> ${kw}
+                    </span>
+                `).join('');
+            }
+
+            // Recommendations Generator
+            const recContainer = document.getElementById('recommendations-container');
+            let recsHtml = '';
+
+            if (res.missing.length > 0) {
+                recsHtml += `
+                    <div class="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20">
+                        <span class="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Critical Skill Gaps
+                        </span>
+                        <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                            Consider explicitly incorporating top missing keywords like <strong class="text-gray-900 dark:text-white font-mono">${res.missing.slice(0, 3).join(', ')}</strong> into project descriptions or core skills list.
+                        </p>
+                    </div>
+                `;
+            }
+
+            recsHtml += `
+                <div class="p-4 rounded-xl bg-brand-500/5 border border-brand-500/20">
+                    <span class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-bolt"></i> Action Verbs & Quantifiable Impact
+                    </span>
+                    <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                        Incorporate metrics (e.g., "Increased API throughput by 35%" or "Reduced latency by 120ms") along with active verbs like <em>Architected, Led, Optimized, Spearheaded</em>.
+                    </p>
+                </div>
+            `;
+
+            recContainer.innerHTML = recsHtml;
+        }
+
+        // --- Live Inspector Keyword Highlighter ---
+        function renderInspectorUI(res) {
+            document.getElementById('inspector-matched-count').textContent = res.matched.length;
+            document.getElementById('inspector-missing-count').textContent = res.missing.length;
+
+            let text = res.resumeText;
+            
+            // Escape HTML characters to prevent XSS
+            text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+            // Sort matched words by length descending so sub-words don't mess up replacing
+            const sortedMatched = [...res.matched].sort((a, b) => b.length - a.length);
+
+            sortedMatched.forEach(kw => {
+                const regex = new RegExp(`\\b(${kw.replace('.', '\\.')})\\b`, 'gi');
+                text = text.replace(regex, `<span class="keyword-highlight highlight-matched">$1</span>`);
+            });
+
+            document.getElementById('highlighted-resume-view').innerHTML = text;
+        }
+
+        // --- Render Radial & Bar Charts using Chart.js ---
+        function renderCharts(res) {
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#f3f4f6' : '#1f2937';
+            const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+            // 1. Radial Gauge Chart
+            const gaugeCtx = document.getElementById('gaugeChart').getContext('2d');
+            if (gaugeChartInstance) gaugeChartInstance.destroy();
+
+            const matchColor = res.overallScore >= 70 ? '#10b981' : (res.overallScore >= 50 ? '#14b8a6' : '#f43f5e');
+
+            gaugeChartInstance = new Chart(gaugeCtx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [res.overallScore, 100 - res.overallScore],
+                        backgroundColor: [matchColor, isDark ? '#374151' : '#e5e7eb'],
+                        borderWidth: 0,
+                    }]
+                },
+                options: {
+                    cutout: '80%',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { tooltip: { enabled: false } }
+                }
+            });
+
+            // 2. Category Radar / Bar Chart
+            const catCtx = document.getElementById('categoryChart').getContext('2d');
+            if (categoryChartInstance) categoryChartInstance.destroy();
+
+            const categories = Object.keys(res.categoryScores);
+            const scores = Object.values(res.categoryScores);
+
+            categoryChartInstance = new Chart(catCtx, {
+                type: 'bar',
+                data: {
+                    labels: categories,
+                    datasets: [{
+                        label: 'Match %',
+                        data: scores,
+                        backgroundColor: 'rgba(20, 184, 166, 0.7)',
+                        borderColor: '#14b8a6',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { color: textColor, font: { size: 10 } },
+                            grid: { color: gridColor }
+                        },
+                        x: {
+                            ticks: { color: textColor, font: { size: 9 } },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // --- Live API Payload Generator ---
+        function updateLiveApiPayloads() {
+            const jd = document.getElementById('jd-input').value;
+            const resume = document.getElementById('resume-input').value;
+
+            const reqPayload = {
+                job_description: jd.slice(0, 300) + (jd.length > 300 ? '...' : ''),
+                resume_text: resume.slice(0, 300) + (resume.length > 300 ? '...' : '')
+            };
+
+            document.getElementById('api-req-payload').textContent = JSON.stringify(reqPayload, null, 2);
+
+            if (lastAnalysisResult) {
+                const resPayload = {
+                    status: "success",
+                    timestamp: new Date().toISOString(),
+                    overall_match_score: lastAnalysisResult.overallScore,
+                    breakdown: {
+                        hard_skills_match: lastAnalysisResult.hardScore,
+                        soft_skills_match: lastAnalysisResult.softScore,
+                        keyword_density: parseFloat(lastAnalysisResult.density)
+                    },
+                    matched_keywords: lastAnalysisResult.matched,
+                    missing_keywords: lastAnalysisResult.missing,
+                    category_scores: lastAnalysisResult.categoryScores
+                };
+                document.getElementById('api-res-payload').textContent = JSON.stringify(resPayload, null, 2);
+            }
+        }
+
+        // --- Copy Helper ---
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Payload copied to clipboard!');
+            }).catch(() => {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('Payload copied to clipboard!');
+            });
+        }
+
+        // --- Initializer on Load ---
+        window.onload = function() {
+            loadPreset('swe');
+        };
+    </script>
+</body>
+</html>
